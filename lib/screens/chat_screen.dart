@@ -30,7 +30,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendMessage() async {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _isLoading) return;
 
     setState(() {
       _messages.add(Message(text: text, sender: Sender.user));
@@ -40,14 +40,28 @@ class _ChatScreenState extends State<ChatScreen> {
     _controller.clear();
     _scrollToBottom();
 
-    final response = await _geminiService.sendMessage(text);
+    final botMessage = Message(text: '', sender: Sender.bot);
+    bool firstChunk = true;
 
-    setState(() {
-      _messages.add(Message(text: response, sender: Sender.bot));
-      _isLoading = false;
-    });
+    await for (final chunk in _geminiService.sendMessageStream(text)) {
+      if (firstChunk) {
+        setState(() {
+          _messages.add(botMessage);
+          _isLoading = false;
+          botMessage.text += chunk;
+          firstChunk = false;
+        });
+      } else {
+        setState(() {
+          botMessage.text += chunk;
+        });
+      }
+      _scrollToBottom();
+    }
 
-    _scrollToBottom();
+    if (firstChunk) {
+      setState(() => _isLoading = false);
+    }
   }
 
   void _scrollToBottom() {

@@ -1,7 +1,7 @@
 enum Sender { user, bot }
 
 class Message {
-  final String text;
+  String text;
   final Sender sender;
   final DateTime time;
 
