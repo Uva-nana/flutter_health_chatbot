@@ -1,31 +1,46 @@
 import 'package:flutter/material.dart';
+import '../models/diet_profile.dart';
 import '../models/message.dart';
 import '../services/gemini_service.dart';
+import '../services/profile_service.dart';
 import '../widgets/message_bubble.dart';
+import 'diet_profile_screen.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final DietProfile? initialProfile;
+
+  const ChatScreen({super.key, this.initialProfile});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final GeminiService _geminiService = GeminiService();
+  late GeminiService _geminiService;
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ProfileService _profileService = ProfileService();
   final List<Message> _messages = [];
   bool _isLoading = false;
+  DietProfile? _profile;
 
   @override
   void initState() {
     super.initState();
-    // Welcome message
-    _messages.add(Message(
-      text:
-          'Hello! I am your personal health and nutrition assistant. 🥗\n\nYou can ask me about:\n• Healthy meal choices\n• Food for your health goals\n• Diet tips for conditions like diabetes\n• Nutrition advice\n\nHow can I help you today?',
-      sender: Sender.bot,
-    ));
+    _profile = widget.initialProfile;
+    _geminiService = GeminiService(profile: _profile);
+    _addWelcomeMessage();
+  }
+
+  void _addWelcomeMessage() {
+    final greeting = _profile != null
+        ? 'Hello! I\'m your personal health assistant, ready to give advice tailored to your profile.\n\n'
+            '• Goal: ${_profile!.goal}\n'
+            '• Restrictions: ${_profile!.restrictions.join(', ')}\n\n'
+            'Ask me about meals, nutrition, diet tips, and more!'
+        : 'Hello! I am your personal health and nutrition assistant. 🥗\n\nYou can ask me about:\n• Healthy meal choices\n• Food for your health goals\n• Diet tips for conditions like diabetes\n• Nutrition advice\n\nHow can I help you today?';
+
+    _messages.add(Message(text: greeting, sender: Sender.bot));
   }
 
   void _sendMessage() async {
@@ -76,6 +91,24 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _openProfileScreen() async {
+    final updatedProfile = await Navigator.push<DietProfile>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DietProfileScreen(existingProfile: _profile),
+      ),
+    );
+
+    if (updatedProfile != null) {
+      setState(() {
+        _profile = updatedProfile;
+        _geminiService = GeminiService(profile: _profile);
+        _messages.clear();
+        _addWelcomeMessage();
+      });
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -100,13 +133,18 @@ class _ChatScreenState extends State<ChatScreen> {
                 Text('Health Assistant',
                     style:
                         TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                Text('Powered by Gemini AI',
+                Text('Powered by Groq AI',
                     style: TextStyle(fontSize: 11, color: Colors.white70)),
               ],
             ),
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Diet Profile',
+            onPressed: _openProfileScreen,
+          ),
           IconButton(
             icon: const Icon(Icons.restaurant_menu),
             tooltip: 'Share your menu',
@@ -116,6 +154,32 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
+          if (_profile == null)
+            GestureDetector(
+              onTap: _openProfileScreen,
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                color: Colors.orange.shade50,
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        color: Colors.orange.shade700, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Set up your diet profile for personalized advice',
+                        style: TextStyle(
+                            color: Colors.orange.shade800, fontSize: 13),
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_ios,
+                        color: Colors.orange.shade700, size: 14),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
             child: ListView.builder(
               controller: _scrollController,

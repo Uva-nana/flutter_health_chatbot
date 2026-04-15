@@ -1,15 +1,21 @@
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import '../models/diet_profile.dart';
 
 class GeminiService {
   final String _apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
   final List<Map<String, String>> _history = [];
 
-  GeminiService() {
+  GeminiService({DietProfile? profile}) {
+    final profileContext = profile != null
+        ? '\n\n${profile.toPromptContext()} Always use this profile to personalize your advice.'
+        : '';
+
     _history.add({
       'role': 'system',
-      'content': '''You are a friendly and knowledgeable health and nutrition assistant.
+      'content':
+          '''You are a friendly and knowledgeable health and nutrition assistant.$profileContext
 Your role is to:
 - Help users choose healthy meals based on their health goals and dietary needs
 - Analyze food menus and suggest the best options for users
@@ -18,7 +24,7 @@ Your role is to:
 - Give practical, easy-to-understand advice
 
 Always be encouraging, supportive, and remind users to consult a doctor for medical advice.
-Keep responses concise and friendly.'''
+Keep responses concise and friendly.''',
     });
   }
 
