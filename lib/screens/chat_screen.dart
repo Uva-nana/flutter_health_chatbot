@@ -3,6 +3,7 @@ import '../models/diet_profile.dart';
 import '../models/message.dart';
 import '../services/gemini_service.dart';
 import '../services/profile_service.dart';
+import '../services/firestore_service.dart';
 import '../widgets/message_bubble.dart';
 import 'diet_profile_screen.dart';
 
@@ -20,8 +21,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ProfileService _profileService = ProfileService();
+  final FirestoreService _firestoreService = FirestoreService();
   final List<Message> _messages = [];
   bool _isLoading = false;
+  bool _loadingHistory = true;
   DietProfile? _profile;
 
   @override
@@ -29,7 +32,27 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _profile = widget.initialProfile;
     _geminiService = GeminiService(profile: _profile);
-    _addWelcomeMessage();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final history = await _firestoreService.loadRecentMessages();
+      if (history.isNotEmpty) {
+        setState(() {
+          _messages.addAll(history);
+          _loadingHistory = false;
+        });
+        _scrollToBottom();
+        return;
+      }
+    } catch (_) {}
+
+    // No history — show welcome message
+    setState(() {
+      _addWelcomeMessage();
+      _loadingHistory = false;
+    });
   }
 
   void _addWelcomeMessage() {
@@ -38,7 +61,7 @@ class _ChatScreenState extends State<ChatScreen> {
             '• Goal: ${_profile!.goal}\n'
             '• Restrictions: ${_profile!.restrictions.join(', ')}\n\n'
             'Ask me about meals, nutrition, diet tips, and more!'
-        : 'Hello! I am your personal health and nutrition assistant. 🥗\n\nYou can ask me about:\n• Healthy meal choices\n• Food for your health goals\n• Diet tips for conditions like diabetes\n• Nutrition advice\n\nHow can I help you today?';
+        : 'Hello! I am your personal health and nutrition assistant.\n\nYou can ask me about:\n• Healthy meal choices\n• Food for your health goals\n• Diet tips for conditions like diabetes\n• Nutrition advice\n\nHow can I help you today?';
 
     _messages.add(Message(text: greeting, sender: Sender.bot));
   }
@@ -47,13 +70,20 @@ class _ChatScreenState extends State<ChatScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty || _isLoading) return;
 
+    final userMessage = Message(text: text, sender: Sender.user);
+
     setState(() {
-      _messages.add(Message(text: text, sender: Sender.user));
+      _messages.add(userMessage);
       _isLoading = true;
     });
 
     _controller.clear();
     _scrollToBottom();
+
+    // Save user message to Firestore
+    try {
+      await _firestoreService.saveMessage(userMessage);
+    } catch (_) {}
 
     final botMessage = Message(text: '', sender: Sender.bot);
     bool firstChunk = true;
@@ -76,6 +106,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (firstChunk) {
       setState(() => _isLoading = false);
+    }
+
+    // Save bot message to Firestore
+    if (botMessage.text.isNotEmpty) {
+      try {
+        await _firestoreService.saveMessage(botMessage);
+      } catch (_) {}
     }
   }
 
@@ -123,6 +160,7 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         backgroundColor: Colors.green.shade600,
         foregroundColor: Colors.white,
+        automaticallyImplyLeading: false,
         title: const Row(
           children: [
             Icon(Icons.health_and_safety, color: Colors.white),
@@ -152,53 +190,57 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_profile == null)
-            GestureDetector(
-              onTap: _openProfileScreen,
-              child: Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                color: Colors.orange.shade50,
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        color: Colors.orange.shade700, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Set up your diet profile for personalized advice',
-                        style: TextStyle(
-                            color: Colors.orange.shade800, fontSize: 13),
+      body: _loadingHistory
+          ? Center(
+              child: CircularProgressIndicator(color: Colors.green.shade600),
+            )
+          : Column(
+              children: [
+                if (_profile == null)
+                  GestureDetector(
+                    onTap: _openProfileScreen,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      color: Colors.orange.shade50,
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              color: Colors.orange.shade700, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Set up your diet profile for personalized advice',
+                              style: TextStyle(
+                                  color: Colors.orange.shade800, fontSize: 13),
+                            ),
+                          ),
+                          Icon(Icons.arrow_forward_ios,
+                              color: Colors.orange.shade700, size: 14),
+                        ],
                       ),
                     ),
-                    Icon(Icons.arrow_forward_ios,
-                        color: Colors.orange.shade700, size: 14),
-                  ],
+                  ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length + (_isLoading ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == _messages.length) {
+                        return _buildTypingIndicator();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: MessageBubble(message: _messages[index]),
+                      );
+                    },
+                  ),
                 ),
-              ),
+                _buildInputBar(),
+              ],
             ),
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length + (_isLoading ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == _messages.length) {
-                  return _buildTypingIndicator();
-                }
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: MessageBubble(message: _messages[index]),
-                );
-              },
-            ),
-          ),
-          _buildInputBar(),
-        ],
-      ),
     );
   }
 
@@ -221,11 +263,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            _dot(0),
-            _dot(1),
-            _dot(2),
-          ],
+          children: [_dot(0), _dot(1), _dot(2)],
         ),
       ),
     );
@@ -273,8 +311,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 hintStyle: TextStyle(color: Colors.grey.shade400),
                 filled: true,
                 fillColor: Colors.grey.shade100,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,

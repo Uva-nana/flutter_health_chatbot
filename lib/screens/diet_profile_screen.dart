@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/diet_profile.dart';
 import '../services/profile_service.dart';
-import 'chat_screen.dart';
+import '../services/firestore_service.dart';
+import 'home_screen.dart';
 
 class DietProfileScreen extends StatefulWidget {
   final DietProfile? existingProfile;
@@ -75,12 +77,19 @@ class _DietProfileScreenState extends State<DietProfileScreen> {
 
     await _profileService.saveProfile(profile);
 
+    // Also save to Firestore if user is logged in
+    if (FirebaseAuth.instance.currentUser != null) {
+      try {
+        await FirestoreService().saveProfile(profile);
+      } catch (_) {}
+    }
+
     if (!mounted) return;
     if (widget.isFirstSetup) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => ChatScreen(initialProfile: profile),
+          builder: (_) => HomeScreen(initialProfile: profile),
         ),
       );
     } else {

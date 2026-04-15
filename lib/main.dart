@@ -1,21 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'models/diet_profile.dart';
-import 'screens/chat_screen.dart';
-import 'screens/diet_profile_screen.dart';
-import 'services/profile_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'screens/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
-  final profile = await ProfileService().loadProfile();
-  runApp(HealthChatbotApp(initialProfile: profile));
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  runApp(const HealthChatbotApp());
 }
 
 class HealthChatbotApp extends StatelessWidget {
-  final DietProfile? initialProfile;
-
-  const HealthChatbotApp({super.key, this.initialProfile});
+  const HealthChatbotApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -26,9 +25,7 @@ class HealthChatbotApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
       ),
-      home: initialProfile == null
-          ? const DietProfileScreen(isFirstSetup: true)
-          : ChatScreen(initialProfile: initialProfile),
+      home: const SplashScreen(),
     );
   }
 }
