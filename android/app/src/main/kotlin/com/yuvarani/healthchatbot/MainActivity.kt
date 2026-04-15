@@ -1,4 +1,4 @@
-package com.example.flutter_health_chatbot
+package com.yuvarani.healthchatbot
 
 import io.flutter.embedding.android.FlutterActivity
 
